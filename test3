@@ -1,0 +1,60 @@
+import PySimpleGUI as sg
+import numpy as np
+from PIL import Image, ImageDraw, ImageGrab
+
+class main:
+    def __init__(self):
+        self.color_fg = 'black'
+        self.color_bg = 'white'
+        self.old_x = None
+        self.old_y = None
+        self.pen_width = 20
+        self.layout = [
+            [sg.Canvas(size=(500, 400), background_color=self.color_bg, key='-CANVAS-')],
+            [   sg.Button('Clear Canvas'), sg.Button('Convert'), sg.Button('Exit')] 
+        ]
+        self.window = sg.Window('Paint App', self.layout, finalize=True)
+        self.canvas = self.window['-CANVAS-'].TKCanvas
+        self.canvas.bind('<B1-Motion>', self.paint)
+        self.canvas.bind('<ButtonRelease-1>', self.reset)
+
+    def paint(self, event):
+        if self.old_x and self.old_y:
+            self.canvas.create_line(self.old_x, self.old_y, event.x, event.y, width=self.pen_width, fill=self.color_fg, capstyle='round', smooth=True)
+        self.old_x = event.x
+        self.old_y = event.y
+
+    def reset(self, event):
+        self.old_x = None
+        self.old_y = None
+    
+    def clearcanvas(self):
+        self.canvas.delete('all')
+
+    def convert(self):
+        x = self.window.CurrentLocation()[0] + self.canvas.winfo_x()
+        y = self.window.CurrentLocation()[1] + self.canvas.winfo_y()
+        x1 = x + self.canvas.winfo_width()
+        y1 = y + self.canvas.winfo_height()
+        drawing = ImageGrab.grab().crop((x, y, x1, y1)) 
+        drawing = drawing.resize((16, 16))
+        drawing_array = np.array(drawing)
+        print("Drawing Array:")
+        print(drawing_array)
+        return drawing_array
+
+    def run(self):
+        while True:
+            event, values = self.window.read()
+            if event == sg.WINDOW_CLOSED or event == 'Exit':
+                break
+            elif event == '-SLIDER-':
+                self.changedW(values['-SLIDER-'])
+            elif event == 'Clear Canvas':
+                self.clearcanvas()
+            elif event == 'Convert':
+                self.convert()
+        self.window.close()
+
+app = main()
+app.run()
