@@ -1,0 +1,112 @@
+import PySimpleGUI as sg
+import numpy as np
+from PIL import Image, ImageDraw, ImageGrab, ImageTk
+import os.path
+
+class main:
+    def __init__(self):
+        self.color_fg = 'black'
+        self.color_bg = 'white'
+        self.old_x = None
+        self.old_y = None
+        self.pen_width = 25
+        draw_column = [
+            [
+                sg.Text('Draw Here:')
+            ],
+            [
+                sg.Canvas(size=(512, 512), background_color=self.color_bg, key='-CANVAS-')
+            ],
+            [
+                sg.Button('Clear Canvas'),
+                sg.Button('Convert'),
+                sg.Button('Exit')
+            ]
+        ]
+        outcome_column = [
+            [
+                sg.Text("Converted Image:")
+            ],
+            [
+                sg.Canvas(size=(512, 512), background_color=self.color_bg, key='-CONVERT_IMAGE-')
+            ],
+            [
+                sg.Text("Predicted Value:")
+            ]
+        ]
+        self.layout = [
+            [
+                sg.Column(draw_column),
+                sg.VSeperator(),
+                sg.Column(outcome_column)
+            ]
+        ]
+        self.window = sg.Window('Paint App', self.layout, finalize=True)
+        self.canvas = self.window['-CANVAS-'].TKCanvas
+        self.convert_image_canvas = self.window['-CONVERT_IMAGE-'].TKCanvas
+        self.canvas.bind('<B1-Motion>', self.paint)
+        self.canvas.bind('<ButtonRelease-1>', self.reset)
+
+    def paint(self, event):
+        if self.old_x and self.old_y:
+            self.canvas.create_line(self.old_x, self.old_y, event.x, event.y, width=self.pen_width, fill=self.color_fg, capstyle='round', smooth=True)
+        self.old_x = event.x
+        self.old_y = event.y
+
+    def reset(self, event):
+        self.old_x = None
+        self.old_y = None
+    
+    def clearcanvas(self):
+        self.canvas.delete('all')
+
+    def convert(self):
+        x, y = self.canvas.winfo_rootx(), self.canvas.winfo_rooty()
+        width, height = self.canvas.winfo_width(), self.canvas.winfo_height()
+
+        img = ImageGrab.grab(bbox=(x, y, x+width, y+height))
+
+        img = img.resize((16, 16))
+        img = img.convert('L')
+        img_array = np.array(img)
+
+        threshold = 128
+        img_array[img_array < threshold] = 0
+        img_array[img_array >= threshold] = 255
+
+        converted_img = Image.new('RGB', (16, 16), color='white')
+        draw = ImageDraw.Draw(converted_img)
+        
+        for i in range(16):
+            for j in range(16):
+                if img_array[i, j] == 0:
+                    draw.rectangle([j, i, j+1, i+1], fill='black')
+        
+        self.update_converted_image(converted_img)
+
+    def update_converted_image(self, image):
+
+        self.convert_image_canvas.delete('all')
+
+        cell_size = 512 // 16
+
+        for i in range(16):
+            for j in range(16):
+                if image.getpixel((j, i)) == (0, 0, 0):
+                    self.convert_image_canvas.create_rectangle(j * cell_size, i * cell_size, (j + 1) * cell_size, (i + 1) * cell_size, fill='black')
+
+        self.window.image_tk = None
+        
+    def run(self):
+        while True:
+            event, values = self.window.read()
+            if event == sg.WINDOW_CLOSED or event == 'Exit':
+                break
+            elif event == 'Clear Canvas':
+                self.clearcanvas()
+            elif event == 'Convert':
+                self.convert()
+        self.window.close()
+
+app = main()
+app.run()
