@@ -1,0 +1,122 @@
+import PySimpleGUI as sg
+import numpy as np
+from PIL import Image, ImageDraw, ImageGrab, ImageTk
+import os.path
+
+class main:
+    def __init__(self):
+        # Default colors and variables
+        self.color_fg = 'black'
+        self.color_bg = 'white'
+        self.old_x = None
+        self.old_y = None
+        self.pen_width = 30
+        
+        # Layout setup
+        draw_column = [
+            [sg.Text('Draw Here:')],
+            [sg.Canvas(size=(512, 512), background_color=self.color_bg, key='-CANVAS-')],
+            [sg.Button('Clear Canvas'), sg.Button('Convert'), sg.Button('Exit')]
+        ]
+        outcome_column1 = [
+            [sg.Text("Converted Image:")],
+            [sg.Canvas(size=(512, 512), background_color=self.color_bg, key='-CONVERT_IMAGE-')],
+            [sg.Text("Predicted Value:")]
+        ]
+        outcome_column2 = [
+            [sg.Text("Matrix:")],
+            [sg.Multiline(size=(26, 17), key='-MATRIX-', disabled=True)]
+        ]
+        self.layout = [[sg.Column(draw_column), sg.VSeperator(), sg.Column(outcome_column1), sg.VSeperator(), sg.Column(outcome_column2)]]
+        
+        # Window creation
+        self.window = sg.Window('Paint App', self.layout, finalize=True)
+        self.canvas = self.window['-CANVAS-'].TKCanvas
+        self.convert_image_canvas = self.window['-CONVERT_IMAGE-'].TKCanvas
+        
+        # Event bindings
+        self.canvas.bind('<B1-Motion>', self.paint)
+        self.canvas.bind('<ButtonRelease-1>', self.reset)
+
+    # Drawing functions
+    def paint(self, event):
+        if self.old_x and self.old_y:
+            self.canvas.create_line(self.old_x, self.old_y, event.x, event.y, width=self.pen_width, fill=self.color_fg, capstyle='round', smooth=True)
+        self.old_x = event.x
+        self.old_y = event.y
+
+    def reset(self, event):
+        self.old_x = None
+        self.old_y = None
+    
+    # Canvas operations
+    def clearcanvas(self):
+        self.canvas.delete('all')
+
+    # Image conversion
+    def convert(self):
+        # Grabbing canvas dimensions
+        x, y = self.canvas.winfo_rootx(), self.canvas.winfo_rooty()
+        width, height = self.canvas.winfo_width(), self.canvas.winfo_height()
+
+        # Grabbing canvas content
+        img = ImageGrab.grab(bbox=(x, y, x+width, y+height))
+
+        # Preprocessing for model
+        img = img.resize((16, 16))
+        img = img.convert('L')
+        img_array = np.array(img)
+
+        # Binarization
+        threshold = 128
+        img_array[img_array < threshold] = 0
+        img_array[img_array >= threshold] = 1
+
+        # Printing matrix representation
+        print("Matrix Representation:")
+        for row in img_array:
+            print(" ".join(map(str, row)))  
+    
+        matrix_text = ""
+        for row in img_array:
+            matrix_text += " ".join(map(str, row)) + "\n"
+        self.window['-MATRIX-'].update(value=matrix_text)
+
+        # Converting to image
+        converted_img = Image.new('RGB', (16, 16), color='white')
+        draw = ImageDraw.Draw(converted_img)
+        
+        # Drawing black pixels
+        for i in range(16):
+            for j in range(16):
+                if img_array[i, j] == 0:
+                    draw.rectangle([j, i, j+1, i+1], fill='black')
+        
+        # Updating converted image
+        self.update_converted_image(converted_img)
+
+    # Updating the converted image on GUI
+    def update_converted_image(self, image):
+        self.convert_image_canvas.delete('all')
+
+        cell_size = 512 // 16
+
+        for i in range(16):
+            for j in range(16):
+                if image.getpixel((j, i)) == (0, 0, 0):
+                    self.convert_image_canvas.create_rectangle(j * cell_size, i * cell_size, (j + 1) * cell_size, (i + 1) * cell_size, fill='black')
+        
+    # Running the application
+    def run(self):
+        while True:
+            event, values = self.window.read()
+            if event == sg.WINDOW_CLOSED or event == 'Exit':
+                break
+            elif event == 'Clear Canvas':
+                self.clearcanvas()
+            elif event == 'Convert':
+                self.convert()
+        self.window.close()
+
+app = main()
+app.run()
